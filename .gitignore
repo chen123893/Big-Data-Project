@@ -1,0 +1,22 @@
+# macOS and notebooks
+.DS_Store
+.ipynb_checkpoints/
+
+# Local Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+
+# Ignore raw and processed data files.
+data/raw/*
+data/processed/*
+
+# Keep folder notes and placeholders in Git.
+!data/raw/.gitkeep
+!data/raw/README.md
+!data/processed/.gitkeep
+!data/processed/README.md
+
+# Ignore trained artifacts because they can get large.
+models/*.pkl
+models/*.joblib
