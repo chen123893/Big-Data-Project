@@ -1,19 +1,18 @@
+import os
 import json
-from pathlib import Path
-
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+RAW_DIR = os.path.join("data", "raw")
+PROCESSED_DIR = os.path.join("data", "processed")
 
-PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+os.makedirs(PROCESSED_DIR, exist_ok=True)
 
-trans_file = RAW_DIR / "transactions_data.csv"
-labels_file = RAW_DIR / "train_fraud_labels.json"
+trans_file = os.path.join(RAW_DIR, "transactions_data.csv")
+labels_file = os.path.join(RAW_DIR, "train_fraud_labels.json")
 
-if not trans_file.exists() or not labels_file.exists():
-    raise SystemExit(f"Error: Could not find required files in {RAW_DIR}")
+if not os.path.exists(trans_file) or not os.path.exists(labels_file):
+    print("Error: Could not find files in data/raw/")
+    exit()
 
 # Load transactions data
 print("\n[Step 1/5] Loading transactions_data.csv...")
@@ -22,7 +21,7 @@ print(f"- Loaded {len(df_trans):,} transaction rows")
 
 # Load the fraud labels (JSON) and convert to a clean DataFrame
 print("\n[Step 2/5] Loading fraud labels...")
-with labels_file.open("r") as f:
+with open(labels_file, "r") as f:
     fraud_labels = json.load(f)
 
 if "target" in fraud_labels:
@@ -38,13 +37,30 @@ df_labels = df_labels[df_labels["id"].astype(str).str.isnumeric()]
 # Change ID to integers
 df_labels["id"] = df_labels["id"].astype(int)
 
-# Convert No to 0 and Yes to 1
-df_labels["is_fraud"] = df_labels["is_fraud"].replace({"No": 0, "Yes": 1, "0": 0, "1": 1})
-print("- Text-based labels ('No'/'Yes') detected. Encoding to binary numbers (0/1)")
+# Convert fraud labels to binary numbers
+print("- Encoding fraud labels to binary numbers (No=0, Yes=1)")
 
-# Remove incomplete rows
+df_labels["is_fraud"] = (
+    df_labels["is_fraud"]
+    .astype(str)
+    .str.strip()
+    .map({
+        "No": 0,
+        "Yes": 1,
+        "no": 0,
+        "yes": 1,
+        "0": 0,
+        "1": 1
+    })
+)
+
+# Remove rows that could not be mapped
 df_labels = df_labels.dropna(subset=["is_fraud"])
+
+# Convert to integer
 df_labels["is_fraud"] = df_labels["is_fraud"].astype(int)
+
+print(df_labels["is_fraud"].value_counts())
 print(f"- Loaded {len(df_labels):,} fraud label mappings successfully.")
 
 # Merge transactions & label
@@ -55,12 +71,12 @@ print(f"- Merged dataset shape: {df_merged.shape}")
 # Clean data columns
 print("\n[Step 4/5] Preprocessing columns...")
 
-# Convert transaction amounts such as "$14.57" to floats.
+# Clean empty values: change $ to O
 if df_merged["amount"].dtype == "O":
     df_merged["amount"] = df_merged["amount"].str.replace("$", "", regex=False).astype(float)
     print("- Successfully removed '$' and converted amount to decimal float numbers.")
 
-# Standardize date time to pandas format.
+# Standardize data time to pandas format
 date_col = "date" if "date" in df_merged.columns else "timestamp"
 df_merged[date_col] = pd.to_datetime(df_merged[date_col])
 print(f"- Converted '{date_col}' column to datetime formatting.")
@@ -70,8 +86,8 @@ sensitive_cols = ["card_number", "cvv", "full_address", "client_name", "zip"]
 df_merged = df_merged.drop(columns=sensitive_cols, errors="ignore")
 print("- Removed sensitive personal data columns for identity protection.")
 
-# Save processed data.
+# Save pocessed data 
 print("\n[Step 5/5] Saving cleaned dataset...")
-output_file = PROCESSED_DIR / "cleaned_transactions.csv"
+output_file = os.path.join(PROCESSED_DIR, "cleaned_transactions.csv")
 df_merged.to_csv(output_file, index=False)
 print(f"Processed data saved safely at: {output_file}")
