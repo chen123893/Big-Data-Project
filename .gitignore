@@ -20,3 +20,6 @@ data/processed/*
 # Ignore trained artifacts because they can get large.
 models/*.pkl
 models/*.joblib
+
+# Ignore generated EDA figures.
+reports/figures/*.png
