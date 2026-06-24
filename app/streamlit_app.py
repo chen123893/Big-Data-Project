@@ -28,7 +28,7 @@ PAGES = {
     "final-model": "Final Model",
 }
 
-COMPLETED_PAGES = {"overview", "eda"}
+COMPLETED_PAGES = {"overview", "eda", "dataset"}
 
 
 st.markdown(
@@ -186,7 +186,75 @@ def show_overview(transactions: pd.DataFrame) -> None:
 
 
 def show_dataset(transactions: pd.DataFrame) -> None:
-    pass
+    page_header(
+        "Dataset Explorer",
+        "Select one transaction column and inspect its distribution.",
+    )
+
+    column_options = {
+        "Transaction Amount": "abs_amount",
+        "Transaction Method": "use_chip",
+        "Merchant State": "merchant_state",
+        "Merchant Category Code": "mcc",
+        "Transaction Hour": "hour",
+        "Has Error": "has_error",
+        "Fraud Label": "is_fraud",
+    }
+    selected_label = st.selectbox("Select a column to explore", list(column_options.keys()))
+    selected_column = column_options[selected_label]
+    column_data = transactions[selected_column].dropna()
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Rows Analysed", f"{len(transactions):,}")
+    col2.metric("Missing Values", f"{transactions[selected_column].isna().sum():,}")
+    col3.metric("Unique Values", f"{transactions[selected_column].nunique():,}")
+
+    st.divider()
+    left, right = st.columns([1.2, 1])
+
+    if selected_column == "abs_amount":
+        plot_data = column_data.sample(min(len(column_data), 100_000), random_state=42)
+        with left:
+            fig, ax = plt.subplots(figsize=(7.5, 4.5))
+            sns.histplot(plot_data, bins=50, ax=ax)
+            ax.set_title("Distribution of Transaction Amount")
+            ax.set_xlabel("Absolute amount")
+            ax.set_ylabel("Transaction count")
+            fig.tight_layout()
+            st.pyplot(fig, width="stretch")
+        with right:
+            st.subheader("Amount Summary")
+            st.dataframe(
+                column_data.describe().rename("value").reset_index(),
+                hide_index=True,
+                width="stretch",
+            )
+    else:
+        summary = (
+            column_data.astype(str)
+            .value_counts()
+            .rename_axis("category")
+            .reset_index(name="count")
+        )
+        summary["percentage"] = summary["count"] / summary["count"].sum() * 100
+        chart_data = summary.head(10)
+
+        with left:
+            fig, ax = plt.subplots(figsize=(7.5, 4.5))
+            sns.barplot(data=chart_data, x="category", y="count", hue="category", legend=False, ax=ax)
+            ax.set_title(f"Top Categories for {selected_label}")
+            ax.set_xlabel(selected_label)
+            ax.set_ylabel("Transaction count")
+            ax.tick_params(axis="x", rotation=30)
+            fig.tight_layout()
+            st.pyplot(fig, width="stretch")
+        with right:
+            st.subheader("Category Summary")
+            st.dataframe(
+                summary.head(20).assign(percentage=lambda data: data["percentage"].round(2)),
+                hide_index=True,
+                width="stretch",
+            )
 
 
 def show_eda() -> None:
@@ -256,5 +324,8 @@ with st.sidebar:
 
 if page == "overview":
     show_overview(transactions)
+elif page == "dataset":
+    show_dataset(transactions)
 elif page == "eda":
     show_eda()
+
