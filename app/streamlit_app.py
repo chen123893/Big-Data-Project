@@ -1,0 +1,260 @@
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+import streamlit as st
+
+
+
+
+st.set_page_config(
+    page_title="Fraud Transaction Dashboard",
+    page_icon="",
+    layout="wide",
+)
+
+sns.set_theme(style="whitegrid")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_FILE = PROJECT_ROOT / "data" / "processed" / "cleaned_transactions.csv"
+FIGURE_DIR = PROJECT_ROOT / "reports" / "figures"
+
+PAGES = {
+    "overview": "Overview / Summary",
+    "eda": "EDA Insights",
+    "dataset": "Dataset",
+    "models": "Model Comparison",
+    "final-model": "Final Model",
+}
+
+COMPLETED_PAGES = {"overview", "eda"}
+
+
+st.markdown(
+    """
+    <style>
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+    }
+    [data-testid="stSidebar"] {
+        background: #f5f7fb;
+        border-right: 1px solid #e2e8f0;
+    }
+    [data-testid="stSidebar"] > div:first-child {
+        padding-top: 2rem;
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        background: transparent;
+        border: 0;
+        border-radius: 7px;
+        color: #1f3f74;
+        font-size: 0.92rem;
+        font-weight: 600;
+        justify-content: flex-start;
+        margin: 0.12rem 0;
+        padding: 0.72rem 0.85rem;
+        text-align: left;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: #e8f1ff;
+        color: #17468f;
+    }
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        background: #d8eaff;
+        color: #123f85;
+        font-weight: 800;
+    }
+    .sidebar-title {
+        color: #17468f;
+        font-size: 1.05rem;
+        font-weight: 800;
+        margin-bottom: 1rem;
+    }
+    .sidebar-role {
+        color: #64748b;
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+    }
+    .section-note {
+        color: #475569;
+        font-size: 0.95rem;
+        margin-top: -0.35rem;
+        margin-bottom: 1.2rem;
+    }
+    .insight-box {
+        border: 1px solid #dbe3ef;
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+@st.cache_data(show_spinner="Loading cleaned transaction data...")
+def load_transactions() -> pd.DataFrame:
+    use_columns = [
+        "date",
+        "amount",
+        "use_chip",
+        "merchant_state",
+        "mcc",
+        "errors",
+        "is_fraud",
+    ]
+    data = pd.read_csv(DATA_FILE, usecols=use_columns)
+    data["date"] = pd.to_datetime(data["date"], errors="coerce")
+    data["amount_value"] = pd.to_numeric(
+        data["amount"].astype(str).str.replace("$", "", regex=False),
+        errors="coerce",
+    )
+    data["abs_amount"] = data["amount_value"].abs()
+    data["hour"] = data["date"].dt.hour
+    data["has_error"] = data["errors"].notna().astype(int)
+    data["use_chip"] = data["use_chip"].fillna("Unknown")
+    data["merchant_state"] = data["merchant_state"].fillna("Unknown")
+    data["mcc"] = data["mcc"].astype(str)
+    data["is_fraud"] = data["is_fraud"].astype(int)
+    return data
+
+
+def set_page(page_key: str) -> None:
+    st.session_state["page"] = page_key
+
+
+def page_header(title: str, subtitle: str | None = None) -> None:
+    st.title(title)
+    if subtitle:
+        st.markdown(f"<p class='section-note'>{subtitle}</p>", unsafe_allow_html=True)
+
+
+def show_image(filename: str, caption: str) -> None:
+    image_path = FIGURE_DIR / filename
+    if image_path.exists():
+        st.image(str(image_path), caption=caption, width="stretch")
+    else:
+        st.info(f"Run the EDA notebook to generate `{filename}`.")
+
+
+def show_summary_metrics(transactions: pd.DataFrame) -> None:
+    total_transactions = len(transactions)
+    fraud_transactions = int(transactions["is_fraud"].sum())
+    fraud_rate = fraud_transactions / total_transactions * 100
+    average_amount = transactions["abs_amount"].mean()
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Transactions", f"{total_transactions:,}")
+    col2.metric("Fraud Transactions", f"{fraud_transactions:,}")
+    col3.metric("Fraud Rate", f"{fraud_rate:.4f}%")
+    col4.metric("Average Amount", f"${average_amount:,.2f}")
+
+
+def show_overview(transactions: pd.DataFrame) -> None:
+    page_header(
+        "Fraud Transaction Dashboard",
+        "Transaction fraud analysis dashboard with dataset summary and exploratory insights.",
+    )
+    show_summary_metrics(transactions)
+
+    st.divider()
+    left, right = st.columns([1.2, 1])
+    with left:
+        st.subheader("Project Focus")
+        st.markdown(
+            """
+            <div class="insight-box">
+            This dashboard presents the cleaned transaction dataset and key fraud
+            analysis visuals to support transaction fraud detection.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.dataframe(
+            transactions[
+                ["date", "amount", "use_chip", "merchant_state", "mcc", "errors", "is_fraud"]
+            ].head(50),
+            hide_index=True,
+            width="stretch",
+        )
+    with right:
+        show_image("eda_fraud_distribution.png", "Fraud vs non-fraud distribution")
+
+
+def show_dataset(transactions: pd.DataFrame) -> None:
+    pass
+
+
+def show_eda() -> None:
+    page_header(
+        "Exploratory Data Analysis",
+        "Key fraud patterns from transaction amount, time, payment method and merchant categories.",
+    )
+
+    tab1, tab2, tab3 = st.tabs(["Core Patterns", "Merchant Risk", "Relationships"])
+    with tab1:
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_fraud_rate_by_hour.png", "Fraud rate by transaction hour")
+        with right:
+            show_image("eda_fraud_rate_by_amount_range.png", "Fraud rate by amount range")
+
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_fraud_rate_by_transaction_method.png", "Fraud rate by transaction method")
+        with right:
+            show_image("eda_monthly_fraud_trend.png", "Monthly fraud rate trend")
+
+    with tab2:
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_top_mcc_fraud_rate.png", "Top merchant categories by fraud rate")
+        with right:
+            show_image("eda_top_state_fraud_rate.png", "Top merchant states by fraud rate")
+
+    with tab3:
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_amount_vs_hour_scatter.png", "Amount vs hour by fraud label")
+        with right:
+            show_image("eda_selected_feature_correlation.png", "Selected feature correlation")
+
+
+
+
+if not DATA_FILE.exists():
+    st.error("Missing `data/processed/cleaned_transactions.csv`. Run `src/01_process_data.py` first.")
+    st.stop()
+
+transactions = load_transactions()
+
+with st.sidebar:
+    page = st.session_state.get("page", "overview")
+    if page not in PAGES:
+        page = "overview"
+
+    st.markdown(
+        """
+        <div class="sidebar-title">Fraud Transaction Dashboard</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    for index, (page_key, page_label) in enumerate(PAGES.items(), start=1):
+        st.button(
+            f"{index:02d}  {page_label}",
+            key=f"nav_{page_key}",
+            type="primary" if page_key == page else "secondary",
+            use_container_width=True,
+            on_click=set_page,
+            args=(page_key,),
+        )
+
+if page == "overview":
+    show_overview(transactions)
+elif page == "eda":
+    show_eda()
