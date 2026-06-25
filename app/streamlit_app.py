@@ -20,10 +20,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_FILE = PROJECT_ROOT / "data" / "processed" / "cleaned_transactions.csv"
 FIGURE_DIR = PROJECT_ROOT / "reports" / "figures"
 MODEL_RESULTS_FILE = PROJECT_ROOT / "reports" / "model_results.csv"
+CONFIG_FILE = Path(__file__).parent / "config.yaml"
 
 # --- AUTHENTICATION SETUP ---
 # Load credentials from config.yaml
-with open('config.yaml') as file:
+with open(CONFIG_FILE) as file:
     config = yaml.load(file, Loader=SafeLoader)
 
 # Create the authenticator object
@@ -571,6 +572,11 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
+    st.divider()
+    try:
+        authenticator.logout(button_name="Logout", location="sidebar")
+    except TypeError:
+        authenticator.logout("Logout", "sidebar")
 
 if page == "overview":
     show_overview(transactions)
