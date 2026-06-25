@@ -1,0 +1,10 @@
+credentials:
+  usernames:
+    nailong@gmail.com:               # <-- Set the email as the key identifier
+      email: "nailong@gmail.com"
+      name: "Admin"
+      password: "nailong"
+cookie:
+  expiry_days: 30
+  key: "some_signature_key"
+  name: "some_cookie_name"
