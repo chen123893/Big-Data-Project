@@ -6,8 +6,6 @@ import seaborn as sns
 import streamlit as st
 
 
-
-
 st.set_page_config(
     page_title="Fraud Transaction Dashboard",
     page_icon="",
@@ -19,16 +17,7 @@ sns.set_theme(style="whitegrid")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_FILE = PROJECT_ROOT / "data" / "processed" / "cleaned_transactions.csv"
 FIGURE_DIR = PROJECT_ROOT / "reports" / "figures"
-
-PAGES = {
-    "overview": "Overview / Summary",
-    "eda": "EDA Insights",
-    "dataset": "Dataset",
-    "models": "Model Comparison",
-    "final-model": "Final Model",
-}
-
-COMPLETED_PAGES = {"overview", "eda", "dataset"}
+MODEL_RESULTS_FILE = PROJECT_ROOT / "reports" / "model_results.csv"
 
 
 st.markdown(
@@ -38,12 +27,42 @@ st.markdown(
         padding-top: 1.5rem;
         padding-bottom: 2rem;
     }
+    .section-note {
+        color: #475569;
+        font-size: 0.95rem;
+        margin-top: -0.35rem;
+        margin-bottom: 1.2rem;
+    }
+    .insight-box {
+        border: 1px solid #dbe3ef;
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+    }
+    .small-label {
+        color: #64748b;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
     [data-testid="stSidebar"] {
         background: #f5f7fb;
         border-right: 1px solid #e2e8f0;
     }
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 2rem;
+    }
+    .sidebar-title {
+        color: #17468f;
+        font-size: 1.05rem;
+        font-weight: 800;
+        margin-bottom: 1rem;
+    }
+    .sidebar-role {
+        color: #64748b;
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
     }
     [data-testid="stSidebar"] .stButton > button {
         background: transparent;
@@ -66,34 +85,48 @@ st.markdown(
         color: #123f85;
         font-weight: 800;
     }
-    .sidebar-title {
-        color: #17468f;
-        font-size: 1.05rem;
-        font-weight: 800;
-        margin-bottom: 1rem;
+    .sidebar-footer {
+        border-top: 1px solid #d9e2ef;
+        margin-top: 2rem;
+        padding-top: 1.1rem;
     }
-    .sidebar-role {
-        color: #64748b;
+    .sidebar-pill {
+        background: #17468f;
+        border-radius: 7px;
+        color: white;
         font-size: 0.9rem;
-        margin-bottom: 0.75rem;
-    }
-    .section-note {
-        color: #475569;
-        font-size: 0.95rem;
-        margin-top: -0.35rem;
-        margin-bottom: 1.2rem;
-    }
-    .insight-box {
-        border: 1px solid #dbe3ef;
-        background: #f8fafc;
-        border-radius: 8px;
-        padding: 1rem 1.1rem;
-        margin-bottom: 1rem;
+        font-weight: 700;
+        padding: 0.8rem;
+        text-align: center;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+
+PAGES = {
+    "overview": {
+        "label": "Overview / Summary",
+        "icon": "01",
+    },
+    "eda": {
+        "label": "EDA Insights",
+        "icon": "02",
+    },
+    "dataset": {
+        "label": "Dataset",
+        "icon": "03",
+    },
+    "models": {
+        "label": "Model Comparison",
+        "icon": "04",
+    },
+    "final-model": {
+        "label": "Final Model",
+        "icon": "05",
+    },
+}
 
 
 @st.cache_data(show_spinner="Loading cleaned transaction data...")
@@ -123,14 +156,25 @@ def load_transactions() -> pd.DataFrame:
     return data
 
 
-def set_page(page_key: str) -> None:
-    st.session_state["page"] = page_key
-
-
-def page_header(title: str, subtitle: str | None = None) -> None:
-    st.title(title)
-    if subtitle:
-        st.markdown(f"<p class='section-note'>{subtitle}</p>", unsafe_allow_html=True)
+@st.cache_data(show_spinner="Loading model results...")
+def load_model_results() -> pd.DataFrame:
+    required_columns = {
+        "model",
+        "approach",
+        "accuracy",
+        "roc_auc",
+        "pr_auc",
+        "fraud_precision",
+        "fraud_recall",
+        "fraud_f1",
+        "training_time_seconds",
+    }
+    results = pd.read_csv(MODEL_RESULTS_FILE)
+    missing_columns = required_columns.difference(results.columns)
+    if missing_columns:
+        missing_text = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing columns in model_results.csv: {missing_text}")
+    return results
 
 
 def show_image(filename: str, caption: str) -> None:
@@ -138,7 +182,29 @@ def show_image(filename: str, caption: str) -> None:
     if image_path.exists():
         st.image(str(image_path), caption=caption, width="stretch")
     else:
-        st.info(f"Run the EDA notebook to generate `{filename}`.")
+        st.info(f"Run the notebook that creates `{filename}` to display this chart.")
+
+
+def page_header(title: str, subtitle: str) -> None:
+    st.title(title)
+    st.markdown(f"<p class='section-note'>{subtitle}</p>", unsafe_allow_html=True)
+
+
+def plot_model_metric(metric_columns: list[str], title: str, y_label: str):
+    plot_data = MODEL_RESULTS.melt(
+        id_vars="model",
+        value_vars=metric_columns,
+        var_name="metric",
+        value_name="score",
+    )
+    fig, ax = plt.subplots(figsize=(9, 4.6))
+    sns.barplot(data=plot_data, x="metric", y="score", hue="model", ax=ax)
+    ax.set_title(title)
+    ax.set_xlabel("Metric")
+    ax.set_ylabel(y_label)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
+    fig.tight_layout()
+    return fig
 
 
 def show_summary_metrics(transactions: pd.DataFrame) -> None:
@@ -157,8 +223,9 @@ def show_summary_metrics(transactions: pd.DataFrame) -> None:
 def show_overview(transactions: pd.DataFrame) -> None:
     page_header(
         "Fraud Transaction Dashboard",
-        "Transaction fraud analysis dashboard with dataset summary and exploratory insights.",
+        "A compact prototype for transaction fraud analysis, model comparison and final model selection.",
     )
+
     show_summary_metrics(transactions)
 
     st.divider()
@@ -168,8 +235,9 @@ def show_overview(transactions: pd.DataFrame) -> None:
         st.markdown(
             """
             <div class="insight-box">
-            This dashboard presents the cleaned transaction dataset and key fraud
-            analysis visuals to support transaction fraud detection.
+            This dashboard supports fraud detection by showing transaction patterns,
+            model performance and the final model choice. Because fraud is rare, recall,
+            PR-AUC and fraud F1-score are treated as more meaningful than accuracy alone.
             </div>
             """,
             unsafe_allow_html=True,
@@ -185,10 +253,46 @@ def show_overview(transactions: pd.DataFrame) -> None:
         show_image("eda_fraud_distribution.png", "Fraud vs non-fraud distribution")
 
 
+def show_eda() -> None:
+    page_header(
+        "Exploratory Data Analysis",
+        "Key fraud patterns from transaction amount, time, payment method and merchant categories.",
+    )
+
+    tab1, tab2, tab3 = st.tabs(["Core Patterns", "Merchant Risk", "Relationships"])
+
+    with tab1:
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_fraud_rate_by_hour.png", "Fraud rate by transaction hour")
+        with right:
+            show_image("eda_fraud_rate_by_amount_range.png", "Fraud rate by amount range")
+
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_fraud_rate_by_transaction_method.png", "Fraud rate by transaction method")
+        with right:
+            show_image("eda_monthly_fraud_trend.png", "Monthly fraud rate trend")
+
+    with tab2:
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_top_mcc_fraud_rate.png", "Top merchant categories by fraud rate")
+        with right:
+            show_image("eda_top_state_fraud_rate.png", "Top merchant states by fraud rate")
+
+    with tab3:
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_amount_vs_hour_scatter.png", "Amount vs hour by fraud label")
+        with right:
+            show_image("eda_selected_feature_correlation.png", "Selected feature correlation")
+
+
 def show_dataset(transactions: pd.DataFrame) -> None:
     page_header(
         "Dataset Explorer",
-        "Select one transaction column and inspect its distribution.",
+        "Select a transaction column to inspect its distribution, counts and missing values.",
     )
 
     column_options = {
@@ -256,49 +360,86 @@ def show_dataset(transactions: pd.DataFrame) -> None:
                 width="stretch",
             )
 
-
-def show_eda() -> None:
-    page_header(
-        "Exploratory Data Analysis",
-        "Key fraud patterns from transaction amount, time, payment method and merchant categories.",
+    st.subheader("Sample Records")
+    st.dataframe(
+        transactions[["date", "amount", "use_chip", "merchant_state", "mcc", "errors", "is_fraud"]].head(30),
+        hide_index=True,
+        width="stretch",
     )
 
-    tab1, tab2, tab3 = st.tabs(["Core Patterns", "Merchant Risk", "Relationships"])
-    with tab1:
-        left, right = st.columns(2)
-        with left:
-            show_image("eda_fraud_rate_by_hour.png", "Fraud rate by transaction hour")
-        with right:
-            show_image("eda_fraud_rate_by_amount_range.png", "Fraud rate by amount range")
 
-        left, right = st.columns(2)
-        with left:
-            show_image("eda_fraud_rate_by_transaction_method.png", "Fraud rate by transaction method")
-        with right:
-            show_image("eda_monthly_fraud_trend.png", "Monthly fraud rate trend")
+def show_models() -> None:
+    page_header(
+        "Model Comparison",
+        "Performance comparison across supervised models and an unsupervised clustering model.",
+    )
 
-    with tab2:
-        left, right = st.columns(2)
-        with left:
-            show_image("eda_top_mcc_fraud_rate.png", "Top merchant categories by fraud rate")
-        with right:
-            show_image("eda_top_state_fraud_rate.png", "Top merchant states by fraud rate")
+    st.dataframe(MODEL_RESULTS.round(4), hide_index=True, width="stretch")
 
-    with tab3:
-        left, right = st.columns(2)
-        with left:
-            show_image("eda_amount_vs_hour_scatter.png", "Amount vs hour by fraud label")
-        with right:
-            show_image("eda_selected_feature_correlation.png", "Selected feature correlation")
+    left, right = st.columns(2)
+    with left:
+        st.pyplot(
+            plot_model_metric(
+                ["accuracy", "roc_auc", "pr_auc"],
+                "Overall Model Metrics",
+                "Score",
+            ),
+            width="stretch",
+        )
+    with right:
+        st.pyplot(
+            plot_model_metric(
+                ["fraud_precision", "fraud_recall", "fraud_f1"],
+                "Fraud-Class Metrics",
+                "Score",
+            ),
+            width="stretch",
+        )
+
+    fig, ax = plt.subplots(figsize=(8, 4.4))
+    sns.barplot(
+        data=MODEL_RESULTS,
+        x="model",
+        y="training_time_seconds",
+        hue="model",
+        legend=False,
+        ax=ax,
+    )
+    ax.set_title("Training Time Comparison")
+    ax.set_xlabel("Model")
+    ax.set_ylabel("Training time (seconds)")
+    ax.tick_params(axis="x", rotation=15)
+    fig.tight_layout()
+    st.pyplot(fig, width="stretch")
+
+    with st.expander("Model interpretation notes"):
+        st.markdown(
+            """
+            - **KNN** has high accuracy, but very low fraud recall, so it misses most fraud cases.
+            - **K-Means** is unsupervised, so it is useful as a clustering comparison rather than a direct classifier.
+            - **Random Forest** is selected for its fraud recall and feature-importance explanation.
+            """
+        )
 
 
+def show_final_model() -> None:
+    pass
+
+
+def set_page(page_key: str) -> None:
+    st.session_state["page"] = page_key
 
 
 if not DATA_FILE.exists():
     st.error("Missing `data/processed/cleaned_transactions.csv`. Run `src/01_process_data.py` first.")
     st.stop()
 
+if not MODEL_RESULTS_FILE.exists():
+    st.error("Missing `reports/model_results.csv`. Run the model comparison notebook or restore the results CSV.")
+    st.stop()
+
 transactions = load_transactions()
+MODEL_RESULTS = load_model_results()
 
 with st.sidebar:
     page = st.session_state.get("page", "overview")
@@ -308,13 +449,15 @@ with st.sidebar:
     st.markdown(
         """
         <div class="sidebar-title">Fraud Transaction Dashboard</div>
+        <div class="sidebar-role">5011CEM Big Data Project</div>
         """,
         unsafe_allow_html=True,
     )
 
-    for index, (page_key, page_label) in enumerate(PAGES.items(), start=1):
+    for page_key, page_info in PAGES.items():
+        button_label = f"{page_info['icon']}  {page_info['label']}"
         st.button(
-            f"{index:02d}  {page_label}",
+            button_label,
             key=f"nav_{page_key}",
             type="primary" if page_key == page else "secondary",
             use_container_width=True,
@@ -324,8 +467,17 @@ with st.sidebar:
 
 if page == "overview":
     show_overview(transactions)
-elif page == "dataset":
-    show_dataset(transactions)
 elif page == "eda":
     show_eda()
+elif page == "dataset":
+    show_dataset(transactions)
+elif page == "models":
+    show_models()
+else:
+    show_final_model()
 
+if page != "final-model":
+    st.divider()
+    st.caption(
+        "Fraud is a rare class, so recall, PR-AUC and fraud F1-score are more meaningful than accuracy alone."
+    )
