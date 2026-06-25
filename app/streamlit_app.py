@@ -152,20 +152,48 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 PAGES = {
-    "overview": {"label": "Overview / Summary", "icon": "01"},
-    "eda": {"label": "EDA Insights", "icon": "02"},
-    "dataset": {"label": "Dataset", "icon": "03"},
-    "models": {"label": "Model Comparison", "icon": "04"},
-    "final-model": {"label": "Final Model", "icon": "05"},
+    "overview": {
+        "label": "Overview / Summary",
+        "icon": "01",
+    },
+    "eda": {
+        "label": "EDA Insights",
+        "icon": "02",
+    },
+    "dataset": {
+        "label": "Dataset",
+        "icon": "03",
+    },
+    "models": {
+        "label": "Model Comparison",
+        "icon": "04",
+    },
+    "final-model": {
+        "label": "Final Model",
+        "icon": "05",
+    },
 }
+
 
 @st.cache_data(show_spinner="Loading cleaned transaction data...")
 def load_transactions() -> pd.DataFrame:
-    use_columns = ["date", "amount", "use_chip", "merchant_state", "mcc", "errors", "is_fraud"]
+    use_columns = [
+        "date",
+        "amount",
+        "use_chip",
+        "merchant_state",
+        "mcc",
+        "errors",
+        "is_fraud",
+    ]
     data = pd.read_csv(DATA_FILE, usecols=use_columns)
     data["date"] = pd.to_datetime(data["date"], errors="coerce")
-    data["amount_value"] = pd.to_numeric(data["amount"].astype(str).str.replace("$", "", regex=False), errors="coerce")
+    data["amount_value"] = pd.to_numeric(
+        data["amount"].astype(str).str.replace("$", "", regex=False),
+        errors="coerce",
+    )
     data["abs_amount"] = data["amount_value"].abs()
     data["hour"] = data["date"].dt.hour
     data["has_error"] = data["errors"].notna().astype(int)
@@ -175,11 +203,19 @@ def load_transactions() -> pd.DataFrame:
     data["is_fraud"] = data["is_fraud"].astype(int)
     return data
 
+
 @st.cache_data(show_spinner="Loading model results...")
 def load_model_results() -> pd.DataFrame:
     required_columns = {
-        "model", "approach", "accuracy", "roc_auc", "pr_auc",
-        "fraud_precision", "fraud_recall", "fraud_f1", "training_time_seconds",
+        "model",
+        "approach",
+        "accuracy",
+        "roc_auc",
+        "pr_auc",
+        "fraud_precision",
+        "fraud_recall",
+        "fraud_f1",
+        "training_time_seconds",
     }
     results = pd.read_csv(MODEL_RESULTS_FILE)
     missing_columns = required_columns.difference(results.columns)
@@ -188,19 +224,27 @@ def load_model_results() -> pd.DataFrame:
         raise ValueError(f"Missing columns in model_results.csv: {missing_text}")
     return results
 
+
 def show_image(filename: str, caption: str) -> None:
     image_path = FIGURE_DIR / filename
     if image_path.exists():
-        st.image(str(image_path), caption=caption, use_container_width=True)
+        st.image(str(image_path), caption=caption, width="stretch")
     else:
         st.info(f"Run the notebook that creates `{filename}` to display this chart.")
+
 
 def page_header(title: str, subtitle: str) -> None:
     st.title(title)
     st.markdown(f"<p class='section-note'>{subtitle}</p>", unsafe_allow_html=True)
 
+
 def plot_model_metric(metric_columns: list[str], title: str, y_label: str):
-    plot_data = MODEL_RESULTS.melt(id_vars="model", value_vars=metric_columns, var_name="metric", value_name="score")
+    plot_data = MODEL_RESULTS.melt(
+        id_vars="model",
+        value_vars=metric_columns,
+        var_name="metric",
+        value_name="score",
+    )
     fig, ax = plt.subplots(figsize=(9, 4.6))
     sns.barplot(data=plot_data, x="metric", y="score", hue="model", ax=ax)
     ax.set_title(title)
@@ -209,6 +253,7 @@ def plot_model_metric(metric_columns: list[str], title: str, y_label: str):
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
     fig.tight_layout()
     return fig
+
 
 def show_summary_metrics(transactions: pd.DataFrame) -> None:
     total_transactions = len(transactions)
@@ -222,44 +267,156 @@ def show_summary_metrics(transactions: pd.DataFrame) -> None:
     col3.metric("Fraud Rate", f"{fraud_rate:.4f}%")
     col4.metric("Average Amount", f"${average_amount:,.2f}")
 
+
 def show_overview(transactions: pd.DataFrame) -> None:
-    page_header("Fraud Transaction Dashboard", "A compact prototype for transaction fraud analysis, model comparison and final model selection.")
+    page_header(
+        "Fraud Transaction Dashboard",
+        "A compact prototype for transaction fraud analysis, model comparison and final model selection.",
+    )
+
     show_summary_metrics(transactions)
+
     st.divider()
     left, right = st.columns([1.2, 1])
     with left:
         st.subheader("Project Focus")
-        st.markdown('<div class="insight-box">This dashboard supports fraud detection by showing transaction patterns...</div>', unsafe_allow_html=True)
-        st.dataframe(transactions[["date", "amount", "use_chip", "merchant_state", "mcc", "errors", "is_fraud"]].head(50), hide_index=True, use_container_width=True)
+        st.markdown(
+            """
+            <div class="insight-box">
+            This dashboard supports fraud detection by showing transaction patterns,
+            model performance and the final model choice. Because fraud is rare, recall,
+            PR-AUC and fraud F1-score are treated as more meaningful than accuracy alone.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.dataframe(
+            transactions[
+                ["date", "amount", "use_chip", "merchant_state", "mcc", "errors", "is_fraud"]
+            ].head(50),
+            hide_index=True,
+            width="stretch",
+        )
     with right:
         show_image("eda_fraud_distribution.png", "Fraud vs non-fraud distribution")
 
+
 def show_eda() -> None:
-    page_header("Exploratory Data Analysis", "Key fraud patterns from transaction parameters.")
+    page_header(
+        "Exploratory Data Analysis",
+        "Key fraud patterns from transaction amount, time, payment method and merchant categories.",
+    )
+
     tab1, tab2, tab3 = st.tabs(["Core Patterns", "Merchant Risk", "Relationships"])
+
     with tab1:
         left, right = st.columns(2)
-        with left: show_image("eda_fraud_rate_by_hour.png", "Fraud rate by transaction hour")
-        with right: show_image("eda_fraud_rate_by_amount_range.png", "Fraud rate by amount range")
+        with left:
+            show_image("eda_fraud_rate_by_hour.png", "Fraud rate by transaction hour")
+        with right:
+            show_image("eda_fraud_rate_by_amount_range.png", "Fraud rate by amount range")
+
+        left, right = st.columns(2)
+        with left:
+            show_image("eda_fraud_rate_by_transaction_method.png", "Fraud rate by transaction method")
+        with right:
+            show_image("eda_monthly_fraud_trend.png", "Monthly fraud rate trend")
+
     with tab2:
         left, right = st.columns(2)
-        with left: show_image("eda_top_mcc_fraud_rate.png", "Top merchant categories by fraud rate")
-        with right: show_image("eda_top_state_fraud_rate.png", "Top merchant states by fraud rate")
+        with left:
+            show_image("eda_top_mcc_fraud_rate.png", "Top merchant categories by fraud rate")
+        with right:
+            show_image("eda_top_state_fraud_rate.png", "Top merchant states by fraud rate")
+
     with tab3:
         left, right = st.columns(2)
-        with left: show_image("eda_amount_vs_hour_scatter.png", "Amount vs hour by fraud label")
-        with right: show_image("eda_selected_feature_correlation.png", "Selected feature correlation")
+        with left:
+            show_image("eda_amount_vs_hour_scatter.png", "Amount vs hour by fraud label")
+        with right:
+            show_image("eda_selected_feature_correlation.png", "Selected feature correlation")
+
 
 def show_dataset(transactions: pd.DataFrame) -> None:
-    page_header("Dataset Explorer", "Select a transaction column to inspect its distribution.")
-    column_options = {"Transaction Amount": "abs_amount", "Transaction Method": "use_chip", "Merchant State": "merchant_state"}
+    page_header(
+        "Dataset Explorer",
+        "Select a transaction column to inspect its distribution, counts and missing values.",
+    )
+
+    column_options = {
+        "Transaction Amount": "abs_amount",
+        "Transaction Method": "use_chip",
+        "Merchant State": "merchant_state",
+        "Merchant Category Code": "mcc",
+        "Transaction Hour": "hour",
+        "Has Error": "has_error",
+        "Fraud Label": "is_fraud",
+    }
     selected_label = st.selectbox("Select a column to explore", list(column_options.keys()))
     selected_column = column_options[selected_label]
     column_data = transactions[selected_column].dropna()
-    st.write(column_data.describe())
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Rows Analysed", f"{len(transactions):,}")
+    col2.metric("Missing Values", f"{transactions[selected_column].isna().sum():,}")
+    col3.metric("Unique Values", f"{transactions[selected_column].nunique():,}")
+
+    st.divider()
+    left, right = st.columns([1.2, 1])
+
+    if selected_column == "abs_amount":
+        plot_data = column_data.sample(min(len(column_data), 100_000), random_state=42)
+        with left:
+            fig, ax = plt.subplots(figsize=(7.5, 4.5))
+            sns.histplot(plot_data, bins=50, ax=ax)
+            ax.set_title("Distribution of Transaction Amount")
+            ax.set_xlabel("Absolute amount")
+            ax.set_ylabel("Transaction count")
+            fig.tight_layout()
+            st.pyplot(fig, width="stretch")
+        with right:
+            st.subheader("Amount Summary")
+            st.dataframe(
+                column_data.describe().rename("value").reset_index(),
+                hide_index=True,
+                width="stretch",
+            )
+    else:
+        summary = (
+            column_data.astype(str)
+            .value_counts()
+            .rename_axis("category")
+            .reset_index(name="count")
+        )
+        summary["percentage"] = summary["count"] / summary["count"].sum() * 100
+        chart_data = summary.head(10)
+
+        with left:
+            fig, ax = plt.subplots(figsize=(7.5, 4.5))
+            sns.barplot(data=chart_data, x="category", y="count", hue="category", legend=False, ax=ax)
+            ax.set_title(f"Top Categories for {selected_label}")
+            ax.set_xlabel(selected_label)
+            ax.set_ylabel("Transaction count")
+            ax.tick_params(axis="x", rotation=30)
+            fig.tight_layout()
+            st.pyplot(fig, width="stretch")
+        with right:
+            st.subheader("Category Summary")
+            st.dataframe(
+                summary.head(20).assign(percentage=lambda data: data["percentage"].round(2)),
+                hide_index=True,
+                width="stretch",
+            )
+
+    st.subheader("Sample Records")
+    st.dataframe(
+        transactions[["date", "amount", "use_chip", "merchant_state", "mcc", "errors", "is_fraud"]].head(30),
+        hide_index=True,
+        width="stretch",
+    )
+
 
 def show_models() -> None:
-
     page_header(
         "Model Comparison",
         "Performance comparison across supervised models and an unsupervised clustering model.",
@@ -268,7 +425,6 @@ def show_models() -> None:
     st.dataframe(MODEL_RESULTS.round(4), hide_index=True, width="stretch")
 
     left, right = st.columns(2)
-
     with left:
         st.pyplot(
             plot_model_metric(
@@ -278,7 +434,6 @@ def show_models() -> None:
             ),
             width="stretch",
         )
-
     with right:
         st.pyplot(
             plot_model_metric(
@@ -289,7 +444,6 @@ def show_models() -> None:
             width="stretch",
         )
 
-
     fig, ax = plt.subplots(figsize=(8, 4.4))
     sns.barplot(
         data=MODEL_RESULTS,
@@ -299,15 +453,12 @@ def show_models() -> None:
         legend=False,
         ax=ax,
     )
-
     ax.set_title("Training Time Comparison")
     ax.set_xlabel("Model")
     ax.set_ylabel("Training time (seconds)")
     ax.tick_params(axis="x", rotation=15)
     fig.tight_layout()
     st.pyplot(fig, width="stretch")
-
-
 
     with st.expander("Model interpretation notes"):
         st.markdown(
@@ -319,9 +470,6 @@ def show_models() -> None:
         )
 
 
-
-
-
 def show_final_model() -> None:
     page_header(
         "Final Model",
@@ -331,17 +479,12 @@ def show_final_model() -> None:
     rf_row = MODEL_RESULTS[MODEL_RESULTS["model"] == "Random Forest"]
     knn_row = MODEL_RESULTS[MODEL_RESULTS["model"] == "KNN"]
 
-
-
     col1, col2, col3 = st.columns(3)
     col1.metric("Selected Model", "Random Forest")
     col2.metric("Fraud Recall", f"{rf_row['fraud_recall'].iloc[0]:.4f}")
     col3.metric("PR-AUC", f"{rf_row['pr_auc'].iloc[0]:.4f}")
 
-
-
     left, right = st.columns([1.05, 1])
-
     with left:
         st.markdown(
             """
@@ -351,42 +494,30 @@ def show_final_model() -> None:
             of fraud transactions and provides feature importance, which makes the fraud-risk
             factors easier to explain in the report and viva.
             </div>
-
             """,
-
             unsafe_allow_html=True,
-
         )
-
         st.dataframe(
             pd.concat([rf_row, knn_row])[
                 ["model", "accuracy", "pr_auc", "fraud_precision", "fraud_recall", "fraud_f1"]
             ].round(4),
             hide_index=True,
             width="stretch",
-
         )
-
         st.markdown(
-
             """
             **Why not KNN even though accuracy is high?**
+
             KNN accuracy is high because most transactions are non-fraud. Its fraud recall is
             very low, meaning it misses many true fraud cases. For fraud detection, recall and
             PR-AUC are more useful than accuracy alone.
             """
-
         )
-
     with right:
         show_image("model_random_forest_feature_importance.png", "Random Forest feature importance")
 
-
-
     st.subheader("Random Forest Evaluation Charts")
-
     left, right = st.columns(2)
-
     with left:
         show_image("model_random_forest_confusion_matrix.png", "Random Forest confusion matrix")
     with right:
@@ -405,18 +536,13 @@ if not MODEL_RESULTS_FILE.exists():
     st.error("Missing `reports/model_results.csv`. Run the model comparison notebook or restore the results CSV.")
     st.stop()
 
-
 transactions = load_transactions()
 MODEL_RESULTS = load_model_results()
-
-
 
 with st.sidebar:
     page = st.session_state.get("page", "overview")
     if page not in PAGES:
         page = "overview"
-
-
 
     st.markdown(
         """
@@ -425,8 +551,6 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-
-
 
     for page_key, page_info in PAGES.items():
         button_label = f"{page_info['icon']}  {page_info['label']}"
@@ -439,28 +563,27 @@ with st.sidebar:
             args=(page_key,),
         )
 
-
+    st.markdown(
+        """
+        <div class="sidebar-footer">
+            <div class="sidebar-pill">Random Forest Selected</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 if page == "overview":
     show_overview(transactions)
-
 elif page == "eda":
     show_eda()
-
 elif page == "dataset":
     show_dataset(transactions)
-
 elif page == "models":
     show_models()
-
 else:
     show_final_model()
 
-
-
-if page != "final-model":
-    st.divider()
-    st.caption(
-        "Fraud is a rare class, so recall, PR-AUC and fraud F1-score are more meaningful than accuracy alone."
-    ) 
-
+st.divider()
+st.caption(
+    "Fraud is a rare class, so recall, PR-AUC and fraud F1-score are more meaningful than accuracy alone."
+)
