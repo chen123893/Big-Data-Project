@@ -423,7 +423,57 @@ def show_models() -> None:
 
 
 def show_final_model() -> None:
-    pass
+    page_header(
+        "Final Model",
+        "Random Forest is selected because it balances fraud recall with explainability.",
+    )
+
+    rf_row = MODEL_RESULTS[MODEL_RESULTS["model"] == "Random Forest"]
+    knn_row = MODEL_RESULTS[MODEL_RESULTS["model"] == "KNN"]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Selected Model", "Random Forest")
+    col2.metric("Fraud Recall", f"{rf_row['fraud_recall'].iloc[0]:.4f}")
+    col3.metric("PR-AUC", f"{rf_row['pr_auc'].iloc[0]:.4f}")
+
+    left, right = st.columns([1.05, 1])
+    with left:
+        st.markdown(
+            """
+            <div class="insight-box">
+            <span class="small-label">Reason for selection</span><br>
+            Random Forest is selected as the final model because it catches a high proportion
+            of fraud transactions and provides feature importance, which makes the fraud-risk
+            factors easier to explain in the report and viva.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.dataframe(
+            pd.concat([rf_row, knn_row])[
+                ["model", "accuracy", "pr_auc", "fraud_precision", "fraud_recall", "fraud_f1"]
+            ].round(4),
+            hide_index=True,
+            width="stretch",
+        )
+        st.markdown(
+            """
+            **Why not KNN even though accuracy is high?**
+
+            KNN accuracy is high because most transactions are non-fraud. Its fraud recall is
+            very low, meaning it misses many true fraud cases. For fraud detection, recall and
+            PR-AUC are more useful than accuracy alone.
+            """
+        )
+    with right:
+        show_image("model_random_forest_feature_importance.png", "Random Forest feature importance")
+
+    st.subheader("Random Forest Evaluation Charts")
+    left, right = st.columns(2)
+    with left:
+        show_image("model_random_forest_confusion_matrix.png", "Random Forest confusion matrix")
+    with right:
+        show_image("model_random_forest_precision_recall_curve.png", "Random Forest precision-recall curve")
 
 
 def set_page(page_key: str) -> None:
