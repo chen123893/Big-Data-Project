@@ -259,41 +259,174 @@ def show_dataset(transactions: pd.DataFrame) -> None:
     st.write(column_data.describe())
 
 def show_models() -> None:
-    page_header("Model Comparison", "Performance comparison across supervised models.")
-    st.dataframe(MODEL_RESULTS.round(4), hide_index=True, use_container_width=True)
+
+    page_header(
+        "Model Comparison",
+        "Performance comparison across supervised models and an unsupervised clustering model.",
+    )
+
+    st.dataframe(MODEL_RESULTS.round(4), hide_index=True, width="stretch")
+
+    left, right = st.columns(2)
+
+    with left:
+        st.pyplot(
+            plot_model_metric(
+                ["accuracy", "roc_auc", "pr_auc"],
+                "Overall Model Metrics",
+                "Score",
+            ),
+            width="stretch",
+        )
+
+    with right:
+        st.pyplot(
+            plot_model_metric(
+                ["fraud_precision", "fraud_recall", "fraud_f1"],
+                "Fraud-Class Metrics",
+                "Score",
+            ),
+            width="stretch",
+        )
+
+
+    fig, ax = plt.subplots(figsize=(8, 4.4))
+    sns.barplot(
+        data=MODEL_RESULTS,
+        x="model",
+        y="training_time_seconds",
+        hue="model",
+        legend=False,
+        ax=ax,
+    )
+
+    ax.set_title("Training Time Comparison")
+    ax.set_xlabel("Model")
+    ax.set_ylabel("Training time (seconds)")
+    ax.tick_params(axis="x", rotation=15)
+    fig.tight_layout()
+    st.pyplot(fig, width="stretch")
+
+
+
+    with st.expander("Model interpretation notes"):
+        st.markdown(
+            """
+            - **KNN** has high accuracy, but very low fraud recall, so it misses most fraud cases.
+            - **K-Means** is unsupervised, so it is useful as a clustering comparison rather than a direct classifier.
+            - **Random Forest** is selected for its fraud recall and feature-importance explanation.
+            """
+        )
+
+
+
+
 
 def show_final_model() -> None:
-    page_header("Final Model", "Random Forest execution results.")
+    page_header(
+        "Final Model",
+        "Random Forest is selected because it balances fraud recall with explainability.",
+    )
+
+    rf_row = MODEL_RESULTS[MODEL_RESULTS["model"] == "Random Forest"]
+    knn_row = MODEL_RESULTS[MODEL_RESULTS["model"] == "KNN"]
+
+
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Selected Model", "Random Forest")
+    col2.metric("Fraud Recall", f"{rf_row['fraud_recall'].iloc[0]:.4f}")
+    col3.metric("PR-AUC", f"{rf_row['pr_auc'].iloc[0]:.4f}")
+
+
+
+    left, right = st.columns([1.05, 1])
+
+    with left:
+        st.markdown(
+            """
+            <div class="insight-box">
+            <span class="small-label">Reason for selection</span><br>
+            Random Forest is selected as the final model because it catches a high proportion
+            of fraud transactions and provides feature importance, which makes the fraud-risk
+            factors easier to explain in the report and viva.
+            </div>
+
+            """,
+
+            unsafe_allow_html=True,
+
+        )
+
+        st.dataframe(
+            pd.concat([rf_row, knn_row])[
+                ["model", "accuracy", "pr_auc", "fraud_precision", "fraud_recall", "fraud_f1"]
+            ].round(4),
+            hide_index=True,
+            width="stretch",
+
+        )
+
+        st.markdown(
+
+            """
+            **Why not KNN even though accuracy is high?**
+            KNN accuracy is high because most transactions are non-fraud. Its fraud recall is
+            very low, meaning it misses many true fraud cases. For fraud detection, recall and
+            PR-AUC are more useful than accuracy alone.
+            """
+
+        )
+
+    with right:
+        show_image("model_random_forest_feature_importance.png", "Random Forest feature importance")
+
+
+
+    st.subheader("Random Forest Evaluation Charts")
+
+    left, right = st.columns(2)
+
+    with left:
+        show_image("model_random_forest_confusion_matrix.png", "Random Forest confusion matrix")
+    with right:
+        show_image("model_random_forest_precision_recall_curve.png", "Random Forest precision-recall curve")
+
 
 def set_page(page_key: str) -> None:
     st.session_state["page"] = page_key
 
-# --- PROTECTED PIPELINE EXECUTION --- 
+
 if not DATA_FILE.exists():
-    st.error("Missing data file.")
+    st.error("Missing `data/processed/cleaned_transactions.csv`. Run `src/01_process_data.py` first.")
     st.stop()
 
 if not MODEL_RESULTS_FILE.exists():
-    st.error("Missing model results file.")
+    st.error("Missing `reports/model_results.csv`. Run the model comparison notebook or restore the results CSV.")
     st.stop()
 
-# Data only loads *after* login verification pass
+
 transactions = load_transactions()
 MODEL_RESULTS = load_model_results()
 
-# Render custom protected sidebar interface
+
+
 with st.sidebar:
     page = st.session_state.get("page", "overview")
     if page not in PAGES:
         page = "overview"
 
+
+
     st.markdown(
-        f"""
+        """
         <div class="sidebar-title">Fraud Transaction Dashboard</div>
-        <div class="sidebar-role">Logged in as: <b>{st.session_state.get('name', 'User')}</b></div>
+        <div class="sidebar-role">5011CEM Big Data Project</div>
         """,
         unsafe_allow_html=True,
     )
+
+
 
     for page_key, page_info in PAGES.items():
         button_label = f"{page_info['icon']}  {page_info['label']}"
@@ -305,21 +438,29 @@ with st.sidebar:
             on_click=set_page,
             args=(page_key,),
         )
-        
-    st.markdown('<div class="sidebar-footer"></div>', unsafe_allow_html=True)
-    try:
-        authenticator.logout(button_name='Logout', location='sidebar')
-    except TypeError:
-        authenticator.logout('Logout', 'sidebar')
 
-# Render requested pages
+
+
 if page == "overview":
     show_overview(transactions)
+
 elif page == "eda":
     show_eda()
+
 elif page == "dataset":
     show_dataset(transactions)
+
 elif page == "models":
     show_models()
+
 else:
     show_final_model()
+
+
+
+if page != "final-model":
+    st.divider()
+    st.caption(
+        "Fraud is a rare class, so recall, PR-AUC and fraud F1-score are more meaningful than accuracy alone."
+    ) 
+
