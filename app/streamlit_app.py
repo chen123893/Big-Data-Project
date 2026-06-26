@@ -10,7 +10,6 @@ from yaml.loader import SafeLoader
 # 1. Page Configuration MUST be the first Streamlit command called
 st.set_page_config(
     page_title="Fraud Transaction Dashboard",
-    page_icon="💰",
     layout="wide",
 )
 
@@ -167,23 +166,18 @@ st.markdown(
 PAGES = {
     "overview": {
         "label": "Overview / Summary",
-        "icon": "📊",
     },
     "eda": {
         "label": "EDA Insights",
-        "icon": "🔍",
     },
     "dataset": {
         "label": "Dataset",
-        "icon": "📋",
     },
     "models": {
         "label": "Model Comparison",
-        "icon": "🤖",
     },
     "final-model": {
         "label": "Final Model",
-        "icon": "⭐",
     },
 }
 
@@ -568,7 +562,7 @@ with st.sidebar:
     )
 
     for page_key, page_info in PAGES.items():
-        button_label = f"{page_info['icon']}  {page_info['label']}"
+        button_label = f"{page_info['label']}"
         st.button(
             button_label,
             key=f"nav_{page_key}",
