@@ -10,7 +10,7 @@ from yaml.loader import SafeLoader
 # 1. Page Configuration MUST be the first Streamlit command called
 st.set_page_config(
     page_title="Fraud Transaction Dashboard",
-    page_icon="",
+    page_icon="💰",
     layout="wide",
 )
 
@@ -23,51 +23,61 @@ MODEL_RESULTS_FILE = PROJECT_ROOT / "reports" / "model_results.csv"
 CONFIG_FILE = Path(__file__).parent / "config.yaml"
 
 # --- AUTHENTICATION SETUP ---
-# Load credentials from config.yaml
-with open(CONFIG_FILE) as file:
+with open("config.yaml") as file:
     config = yaml.load(file, Loader=SafeLoader)
 
-# Create the authenticator object
 authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days']
+    config["credentials"],
+    config["cookie"]["name"],
+    config["cookie"]["key"],
+    config["cookie"]["expiry_days"],
 )
 
-# Render the login widget with Email field configurations
-try:
-    authenticator.login(
-        location='main',
-        fields={
-            'Form name': 'Login',
-            'Username': 'Email',      # Overrides the visual label to say Email
-            'Password': 'Password',
-            'Login': 'Login'
-        }
-    )
-except TypeError:
-    # Fallback for older versions if positional arguments are expected
-    authenticator.login(
-        'Login', 
-        'main',
-        fields={
-            'Form name': 'Login',
-            'Username': 'Email',
-            'Password': 'Password',
-            'Login': 'Login'
-        }
-    )
+# --- FIX: ONLY show login if NOT authenticated ---
+# Check if user is already authenticated
+if "authentication_status" not in st.session_state:
+    st.session_state["authentication_status"] = None
 
-# --- PROTECTED ACCESS GATEKEEPING ---
-# If not logged in, stop executing the rest of the file immediately!
-if st.session_state.get("authentication_status") is False:
-    st.error('Email/password is incorrect')
-    st.stop()
-elif st.session_state.get("authentication_status") is None:
-    st.warning('Please enter your email and password')
-    st.stop()
+# Only show login form if not authenticated
+if st.session_state["authentication_status"] is None or st.session_state["authentication_status"] is False:
+    # Login form - only shown when not logged in
+    try:
+        authenticator.login(
+            location="main",
+            fields={
+                "Form name": "Login",
+                "Username": "Email",
+                "Password": "Password",
+                "Login": "Login",
+            },
+        )
+    except TypeError:
+        authenticator.login(
+            "Login",
+            "main",
+            fields={
+                "Form name": "Login",
+                "Username": "Email",
+                "Password": "Password",
+                "Login": "Login",
+            },
+        )
+    
+    # Handle authentication status
+    auth_status = st.session_state.get("authentication_status")
+    
+    if auth_status is False:
+        st.error("Email or password is incorrect.")
+        st.stop()
+    elif auth_status is None:
+        st.warning("Please log in to continue.")
+        st.stop()
+    else:
+        # Successfully authenticated - rerun to clear login form
+        st.rerun()
+
 # --- CONTINUED ONLY IF LOGGED IN ---
+# If we get here, user is authenticated, so login form won't be shown
 
 st.markdown(
     """
@@ -157,23 +167,23 @@ st.markdown(
 PAGES = {
     "overview": {
         "label": "Overview / Summary",
-        "icon": "01",
+        "icon": "📊",
     },
     "eda": {
         "label": "EDA Insights",
-        "icon": "02",
+        "icon": "🔍",
     },
     "dataset": {
         "label": "Dataset",
-        "icon": "03",
+        "icon": "📋",
     },
     "models": {
         "label": "Model Comparison",
-        "icon": "04",
+        "icon": "🤖",
     },
     "final-model": {
         "label": "Final Model",
-        "icon": "05",
+        "icon": "⭐",
     },
 }
 
@@ -229,7 +239,7 @@ def load_model_results() -> pd.DataFrame:
 def show_image(filename: str, caption: str) -> None:
     image_path = FIGURE_DIR / filename
     if image_path.exists():
-        st.image(str(image_path), caption=caption, width="stretch")
+        st.image(str(image_path), caption=caption, use_container_width=True)
     else:
         st.info(f"Run the notebook that creates `{filename}` to display this chart.")
 
@@ -296,7 +306,7 @@ def show_overview(transactions: pd.DataFrame) -> None:
                 ["date", "amount", "use_chip", "merchant_state", "mcc", "errors", "is_fraud"]
             ].head(50),
             hide_index=True,
-            width="stretch",
+            use_container_width=True,
         )
     with right:
         show_image("eda_fraud_distribution.png", "Fraud vs non-fraud distribution")
@@ -374,13 +384,13 @@ def show_dataset(transactions: pd.DataFrame) -> None:
             ax.set_xlabel("Absolute amount")
             ax.set_ylabel("Transaction count")
             fig.tight_layout()
-            st.pyplot(fig, width="stretch")
+            st.pyplot(fig, use_container_width=True)
         with right:
             st.subheader("Amount Summary")
             st.dataframe(
                 column_data.describe().rename("value").reset_index(),
                 hide_index=True,
-                width="stretch",
+                use_container_width=True,
             )
     else:
         summary = (
@@ -400,20 +410,20 @@ def show_dataset(transactions: pd.DataFrame) -> None:
             ax.set_ylabel("Transaction count")
             ax.tick_params(axis="x", rotation=30)
             fig.tight_layout()
-            st.pyplot(fig, width="stretch")
+            st.pyplot(fig, use_container_width=True)
         with right:
             st.subheader("Category Summary")
             st.dataframe(
                 summary.head(20).assign(percentage=lambda data: data["percentage"].round(2)),
                 hide_index=True,
-                width="stretch",
+                use_container_width=True,
             )
 
     st.subheader("Sample Records")
     st.dataframe(
         transactions[["date", "amount", "use_chip", "merchant_state", "mcc", "errors", "is_fraud"]].head(30),
         hide_index=True,
-        width="stretch",
+        use_container_width=True,
     )
 
 
@@ -423,7 +433,7 @@ def show_models() -> None:
         "Performance comparison across supervised models and an unsupervised clustering model.",
     )
 
-    st.dataframe(MODEL_RESULTS.round(4), hide_index=True, width="stretch")
+    st.dataframe(MODEL_RESULTS.round(4), hide_index=True, use_container_width=True)
 
     left, right = st.columns(2)
     with left:
@@ -433,7 +443,7 @@ def show_models() -> None:
                 "Overall Model Metrics",
                 "Score",
             ),
-            width="stretch",
+            use_container_width=True,
         )
     with right:
         st.pyplot(
@@ -442,7 +452,7 @@ def show_models() -> None:
                 "Fraud-Class Metrics",
                 "Score",
             ),
-            width="stretch",
+            use_container_width=True,
         )
 
     fig, ax = plt.subplots(figsize=(8, 4.4))
@@ -459,7 +469,7 @@ def show_models() -> None:
     ax.set_ylabel("Training time (seconds)")
     ax.tick_params(axis="x", rotation=15)
     fig.tight_layout()
-    st.pyplot(fig, width="stretch")
+    st.pyplot(fig, use_container_width=True)
 
     with st.expander("Model interpretation notes"):
         st.markdown(
@@ -503,7 +513,7 @@ def show_final_model() -> None:
                 ["model", "accuracy", "pr_auc", "fraud_precision", "fraud_recall", "fraud_f1"]
             ].round(4),
             hide_index=True,
-            width="stretch",
+            use_container_width=True,
         )
         st.markdown(
             """
@@ -541,6 +551,10 @@ transactions = load_transactions()
 MODEL_RESULTS = load_model_results()
 
 with st.sidebar:
+    # Only show logout button if authenticated
+    if st.session_state["authentication_status"]:
+        authenticator.logout("Logout", "sidebar")
+
     page = st.session_state.get("page", "overview")
     if page not in PAGES:
         page = "overview"
@@ -573,10 +587,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.divider()
-    try:
-        authenticator.logout(button_name="Logout", location="sidebar")
-    except TypeError:
-        authenticator.logout("Logout", "sidebar")
 
 if page == "overview":
     show_overview(transactions)
